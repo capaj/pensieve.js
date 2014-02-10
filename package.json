@@ -1,0 +1,27 @@
+{
+    "name": "pensieve.js",
+    "version": "0.0.1",
+    "private": false,
+    "author": "capaj <capajj@gmail.com>",
+    "description": "full featured E2E testing framework for node.js",
+    "scripts": {
+        "start": "node app"
+    },
+    "main": "./main.js",
+    "repository": {
+        "type": "git",
+        "url": "https://github.com/capaj/pensieve.js.git"
+    },
+    "engines": {
+        "node": "*"
+    },
+    "keywords": [
+        "e2e",
+        "recorder"
+    ],
+    "dependencies": {
+        "bluebird": "latest",
+        "socket.io": "latest"
+    },
+    "license": "MIT"
+}

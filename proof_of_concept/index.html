@@ -1,0 +1,127 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <title>Proof of concept for pensieve.js</title>
+</head>
+<body>
+    Test text field: <input type="text" id="firstTextInput">
+    Second text field: <input type="text" id="secondTextInput"><br/>
+    <button id="saveButton">Save to LS</button>
+
+<script type="text/javascript">
+    function extend(destination, source) {
+        for (var property in source)
+            destination[property] = source[property];
+        return destination;
+    }
+
+
+    var eventsMemory = [];
+    var sessionStart = Date.now();
+
+    var defaultOptions = {
+        pointerX: 0,
+        pointerY: 0,
+        button: 0,
+        ctrlKey: false,
+        altKey: false,
+        shiftKey: false,
+        metaKey: false,
+        bubbles: true,
+        cancelable: true
+    };
+
+    var eventMatchers = {
+        'HTMLEvents': /^(?:load|unload|abort|error|select|change|submit|reset|focus|blur|resize|scroll)$/,
+        'MouseEvents': /^(?:click|dblclick|mouse(?:down|up|over|move|out))$/
+    };
+
+    function RecordedEvent(event, fromJSON) {
+
+
+        this.startOffset = Date.now() - sessionStart;   // time offset used when replaying
+
+        this.toJSON = function () {
+            var ret = extend({}, event);
+
+            for (var prop in ret) {
+                var serializable = ret[prop];
+                if (serializable && serializable.hasOwnProperty('nodeName')) {
+                    var node = ret[prop];
+                    serializable = ret[prop].nodeName;    // TODO selector must yield just one node every time, so we have to verify that and if it matches more, generate more specific selector that does
+                    if (node.attributes && node.attributes.hasOwnProperty('id')) {
+                        serializable += node.attributes['ids'].value;
+                    }
+                } else if(ret[prop] instanceof Window) {
+                    serializable = '__ps_Window__';
+                }
+                ret[prop] = serializable; // this property should be ready for serialization
+            }
+            return ret;
+        };
+
+        this.simulate = function simulate(element) {
+            var options = extend(defaultOptions, arguments[2] || {});
+            var oEvent, eventType = null;
+
+            for (var name in eventMatchers) {
+                if (eventMatchers[name].test(eventName)) {
+                    eventType = name;
+                    break;
+                }
+            }
+
+            if (!eventType)
+                throw new SyntaxError('Only HTMLEvents and MouseEvents interfaces are supported');
+
+            if (document.createEvent) {
+                oEvent = new Event(eventType);
+                if (eventType == 'HTMLEvents') {
+                    oEvent.initEvent(eventName, options.bubbles, options.cancelable);
+                }
+                else {
+                    oEvent.initMouseEvent(eventName, options.bubbles, options.cancelable, document.defaultView,
+                            options.button, options.pointerX, options.pointerY, options.pointerX, options.pointerY,
+                            options.ctrlKey, options.altKey, options.shiftKey, options.metaKey, options.button, element);
+                }
+                element.dispatchEvent(oEvent);
+            }
+            else {
+                options.clientX = options.pointerX;
+                options.clientY = options.pointerY;
+                var evt = document.createEventObject();
+                oEvent = extend(evt, options);
+                element.fireEvent('on' + eventName, oEvent);
+            }
+            return element;
+        }
+    }
+
+    /**
+     *
+     * @param element
+     * @param {Array<String>} events
+     */
+    function subscribeEvents(element, events) {
+        events.forEach(function (evName) {
+            element.addEventListener(evName, function(e) {
+                console.log(e);
+                var recEvent = new RecordedEvent(e);
+                eventsMemory.push({event: JSON.stringify(recEvent.toJSON()), start_offset: recEvent.startOffset});
+            }, true);   //we want to capture it first, so we specify capture phase
+        });
+
+    }
+    var mouseEvents = ['mousedown', 'mouseup', 'click', 'dblclick',
+//            'mousemove',
+        'mouseover', 'mouseout', 'mousewheel' ];
+    var keyEvents = ['keydown', 'keyup', 'keypress', 'textInput'];
+
+    subscribeEvents(document, mouseEvents);
+    subscribeEvents(document, keyEvents);
+
+
+
+</script>
+</body>
+</html>
