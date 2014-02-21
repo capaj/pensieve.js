@@ -3,11 +3,37 @@
 <head>
     <title>Proof of concept for pensieve.js</title>
 </head>
+<script type="text/javascript" src="http://code.jquery.com/jquery-2.1.0.min.js"></script>
 <body>
     Test text field: <input type="text" id="firstTextInput">
     Second text field: <input type="text" id="secondTextInput"><br/>
-    <button id="saveButton">Save to LS</button>
+    <button class="noRecord" id="replayButton">Replay</button>
 
+    <!--<div style="width: 20%">-->
+        <!--<p>-->
+            <!--Lorem ipsum dolor sit amet, consectetur adipiscing elit. In vitae enim libero. Praesent et nulla vel massa fringilla imperdiet. Nunc non iaculis nisl. Aliquam fringilla vehicula ipsum eu tempor. Donec tincidunt ullamcorper aliquet. Vestibulum tincidunt eget urna id venenatis. Curabitur in cursus orci. Proin rhoncus, nibh non venenatis scelerisque, odio tellus viverra lectus, interdum pulvinar est mi ut tellus. Vestibulum nisi eros, elementum et lacus quis, vehicula faucibus arcu. Ut fermentum nibh vitae odio bibendum, eget aliquet ligula fringilla. Lorem ipsum dolor sit amet, consectetur adipiscing elit. Proin sodales venenatis erat, eu varius risus vestibulum sed. Ut facilisis dolor sit amet dolor hendrerit elementum. Praesent at dolor vel massa mattis congue. Sed vel adipiscing nunc.-->
+        <!--</p>-->
+        <!--<p>-->
+
+            <!--Nunc luctus lectus at dui facilisis, quis tristique felis semper. Mauris sit amet accumsan nulla. Nullam at mi id quam pharetra feugiat eu eleifend felis. Donec eget justo vel odio semper molestie. Donec imperdiet magna ut consectetur auctor. Fusce nec vulputate mauris. Nulla facilisi. Aenean commodo urna dignissim tellus accumsan laoreet. Integer sed neque id nunc pretium pretium. Donec ultricies ipsum ac massa accumsan suscipit ut eget orci. Nunc venenatis elit ac augue auctor, vel congue sapien feugiat. Phasellus luctus nec lacus nec ultricies. In condimentum sed odio vel aliquam.-->
+        <!--</p>-->
+        <!--<p>-->
+
+            <!--Vivamus ac posuere eros. Nullam porta mollis fermentum. Maecenas ultrices tellus lacus, varius ultrices risus rhoncus vitae. Cras a felis malesuada, tristique enim sit amet, malesuada justo. Curabitur in tempor enim. In ipsum erat, faucibus quis bibendum vel, vulputate nec velit. Proin fringilla ligula est, nec fermentum nunc tempor eu. Pellentesque pulvinar malesuada ligula, ac facilisis erat commodo sit amet. Praesent rutrum dolor at tincidunt consectetur. Nunc metus nisl, laoreet non lectus quis, gravida fringilla nunc. Phasellus ornare, purus vel adipiscing mattis, elit nisl dictum libero, ac adipiscing nunc lacus sed nunc. Aenean tincidunt massa eget metus consectetur, et viverra lacus tempus. Integer elementum nisl eget justo bibendum hendrerit. Ut aliquam fermentum bibendum.-->
+        <!--</p>-->
+        <!--<p>-->
+
+            <!--Morbi odio augue, venenatis et sapien nec, faucibus suscipit mauris. Mauris vehicula pharetra massa vel volutpat. Quisque quis pharetra lorem, id rhoncus lorem. Quisque mi metus, vestibulum ut est id, iaculis dapibus quam. Vivamus rhoncus sapien sed fermentum aliquet. Vivamus ullamcorper porta urna quis malesuada. Aenean vel porta tortor, vitae elementum magna. Vestibulum ante ipsum primis in faucibus orci luctus et ultrices posuere cubilia Curae;-->
+        <!--</p>-->
+        <!--<p>-->
+
+            <!--Maecenas sit amet lorem blandit, faucibus lacus id, euismod nunc. Integer venenatis eget risus at ultricies. Mauris orci velit, feugiat placerat eleifend vitae, feugiat at dui. Aenean auctor dignissim sapien id mattis. Phasellus sed imperdiet purus, quis accumsan dui. Curabitur adipiscing iaculis pretium. Duis ultrices tincidunt nibh, nec ultricies justo accumsan convallis. Donec metus odio, vulputate sit amet auctor eget, condimentum sit amet massa. Cum sociis natoque penatibus et magnis dis parturient montes, nascetur ridiculus mus.-->
+        <!--</p>-->
+    <!--</div>-->
+
+    <div class="noRecord">
+        <button class="noRecord" id="saveButton">Save to LS</button>
+    </div>
 <script type="text/javascript">
     function extend(destination, source) {
         for (var property in source)
@@ -15,84 +41,126 @@
         return destination;
     }
 
-
+    var isReplay = false;
     var eventsMemory = [];
     var sessionStart = Date.now();
 
-    var defaultOptions = {
-        pointerX: 0,
-        pointerY: 0,
-        button: 0,
-        ctrlKey: false,
-        altKey: false,
-        shiftKey: false,
-        metaKey: false,
-        bubbles: true,
-        cancelable: true
-    };
+    function getCssSelector(elem) {
+        if (elem === document) {
+            return '__ps_document__';
+        }else if (elem === window) {
+            return '__ps_window__';
+        }else if (elem.attributes && elem.attributes.hasOwnProperty('id') &&  elem.attributes['id'].value) {
+            return elem.nodeName + '#' + elem.attributes['id'].value;
+        }
+        //last resort is simply index of element in jquery array of results
+        var tag = elem.nodeName.toLowerCase();
+        return tag + ':eq(' + $(tag).index(elem) + ')';
+    }
 
     var eventMatchers = {
         'HTMLEvents': /^(?:load|unload|abort|error|select|change|submit|reset|focus|blur|resize|scroll)$/,
-        'MouseEvents': /^(?:click|dblclick|mouse(?:down|up|over|move|out))$/
+        'MouseEvents': /^(?:click|mousewheel|dblclick|mouse(?:down|up|over|move|out))$/,
+        'TextEvent': /^(?:textInput)$/,
+        'KeyboardEvent': /^(?:keydown|keyup|keypress)$/
     };
 
-    function RecordedEvent(event, fromJSON) {
-
-
+    function InputEvent(event, fromJSON) {
+        var self = this;
         this.startOffset = Date.now() - sessionStart;   // time offset used when replaying
+        delete event.timeStamp; //timestamp is irrelevant
 
         this.toJSON = function () {
             var ret = extend({}, event);
-
+            ret.domNodesSerialized = [];
             for (var prop in ret) {
-                var serializable = ret[prop];
-                if (serializable && serializable.hasOwnProperty('nodeName')) {
-                    var node = ret[prop];
-                    serializable = ret[prop].nodeName;    // TODO selector must yield just one node every time, so we have to verify that and if it matches more, generate more specific selector that does
-                    if (node.attributes && node.attributes.hasOwnProperty('id')) {
-                        serializable += node.attributes['ids'].value;
-                    }
-                } else if(ret[prop] instanceof Window) {
-                    serializable = '__ps_Window__';
+                var toSerialize = ret[prop];
+                if (toSerialize && toSerialize.hasOwnProperty('nodeName')) {
+                    ret.domNodesSerialized.push(prop);
+                    ret[prop] = getCssSelector(toSerialize);
+                } else if(toSerialize instanceof Window) {
+                    ret[prop] = '__ps_window__';
                 }
-                ret[prop] = serializable; // this property should be ready for serialization
             }
             return ret;
         };
 
+        if (fromJSON) {
+            for (var prop in event) {
+                var val = event[prop];
+                if (val === '__ps_document__') {
+                    event[prop] = document;
+                } else if(val === '__ps_window__') {
+                    event[prop] = window;
+                }
+            }
+
+            event.domNodesSerialized.forEach(function (propName){
+                var elems = $(event[propName]);
+                if (elems.length === 1) {
+                    event[propName] = elems[0];
+                } else {
+                    if (elems.length === 0) {
+                        throw new Error('Found none elements when deserializing the event');
+                    } else {
+                        throw new Error('Found more than one element when deserializing the event');
+                    }
+                }
+            });
+            delete event.domNodesSerialized;
+
+        }
+
+        this.event = event;
+
         this.simulate = function simulate(element) {
-            var options = extend(defaultOptions, arguments[2] || {});
-            var oEvent, eventType = null;
+            var bEvent, eventType = null;
 
             for (var name in eventMatchers) {
-                if (eventMatchers[name].test(eventName)) {
+                if (eventMatchers[name].test(event.type)) {
                     eventType = name;
                     break;
                 }
             }
 
-            if (!eventType)
+            if (!eventType){
                 throw new SyntaxError('Only HTMLEvents and MouseEvents interfaces are supported');
+            }
 
-            if (document.createEvent) {
-                oEvent = new Event(eventType);
-                if (eventType == 'HTMLEvents') {
-                    oEvent.initEvent(eventName, options.bubbles, options.cancelable);
-                }
-                else {
-                    oEvent.initMouseEvent(eventName, options.bubbles, options.cancelable, document.defaultView,
-                            options.button, options.pointerX, options.pointerY, options.pointerX, options.pointerY,
-                            options.ctrlKey, options.altKey, options.shiftKey, options.metaKey, options.button, element);
-                }
-                element.dispatchEvent(oEvent);
+            if (eventType == 'HTMLEvents') {
+                bEvent = new Event(eventType);
+                bEvent.initEvent(event.type, options.bubbles, options.cancelable);
+                element.dispatchEvent(bEvent);
+
             }
-            else {
-                options.clientX = options.pointerX;
-                options.clientY = options.pointerY;
-                var evt = document.createEventObject();
-                oEvent = extend(evt, options);
-                element.fireEvent('on' + eventName, oEvent);
+            else if(eventType === 'MouseEvents') {
+                bEvent = new MouseEvent(event.type, self.event);
+                self.event.target.dispatchEvent(bEvent);
+            } else if(eventType === 'TextEvent') {
+
+                try {
+                    bEvent = document.createEvent('TextEvent');
+                    bEvent.initTextEvent ('textInput', true, true, null, self.event.data);
+                    var target = self.event.target;
+                    //dunno why but it does not work without selectionStart and selectionEnd assignment, maybe focus is needed? will investigate on this
+                    target.selectionStart = 0;
+                    target.selectionEnd = 0;
+                    target.dispatchEvent(bEvent);
+                }
+                catch (e) {
+                    console.error("Your browser does not support text events!");
+                    throw e;
+                }
+
+            } else if(eventType === 'KeyboardEvent') {
+                bEvent = document.createEvent("KeyboardEvent");
+                bEvent.initKeyboardEvent (event.type, true, true, window,
+                        event.ctrlKey, event.altKey, event.shiftKey, event.metaKey,
+                        self.event.keyCode, self.event.charCode);
+
             }
+            self.event.target.dispatchEvent(bEvent);
+
             return element;
         }
     }
@@ -105,21 +173,45 @@
     function subscribeEvents(element, events) {
         events.forEach(function (evName) {
             element.addEventListener(evName, function(e) {
-                console.log(e);
-                var recEvent = new RecordedEvent(e);
-                eventsMemory.push({event: JSON.stringify(recEvent.toJSON()), start_offset: recEvent.startOffset});
+                if (!$(e.target).hasClass('noRecord') && !isReplay) {
+                    var recEvent = new InputEvent(e);
+                    console.log(e);
+                    console.log("event recorded at " + recEvent.startOffset);
+
+                    eventsMemory.push({event: JSON.stringify(recEvent.toJSON()), start_offset: recEvent.startOffset});
+                }
             }, true);   //we want to capture it first, so we specify capture phase
         });
 
     }
-    var mouseEvents = ['mousedown', 'mouseup', 'click', 'dblclick',
+    var mouseEvents = [
+        'mousedown', 'mouseup',
+        'click',
+        'dblclick',
 //            'mousemove',
-        'mouseover', 'mouseout', 'mousewheel' ];
+//        'mouseover', 'mouseout',
+        'mousewheel'
+    ];
     var keyEvents = ['keydown', 'keyup', 'keypress', 'textInput'];
 
     subscribeEvents(document, mouseEvents);
     subscribeEvents(document, keyEvents);
 
+    $('#saveButton').on('click', function () {
+        localStorage.setItem('events', JSON.stringify(eventsMemory));
+    });
+
+    $('#replayButton').on('click', function () {
+        var evs = JSON.parse(localStorage.getItem('events'));
+        isReplay = true;
+        evs.forEach(function (evJSON){
+            setTimeout(function () {
+                var anIE = new InputEvent(JSON.parse(evJSON.event), true);
+                anIE.simulate();
+                console.log("event dispatched at " + evJSON.start_offset);
+            }, evJSON.start_offset);
+        });
+    });
 
 
 </script>
