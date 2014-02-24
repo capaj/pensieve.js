@@ -7,6 +7,7 @@
 <body>
     Test text field: <input type="text" id="firstTextInput">
     Second text field: <input type="text" id="secondTextInput"><br/>
+    <input type="checkbox" id="CB" /><br />
     <button class="noRecord" id="replayButton">Replay</button>
 
     <!--<div style="width: 20%">-->
@@ -59,10 +60,54 @@
     }
 
     var eventMatchers = {
-        'HTMLEvents': /^(?:load|unload|abort|error|select|change|submit|reset|focus|blur|resize|scroll)$/,
-        'MouseEvents': /^(?:click|mousewheel|dblclick|mouse(?:down|up|over|move|out))$/,
+        'HTMLEvent': /^(?:load|unload|abort|error|select|change|submit|reset|focus|blur|resize|scroll)$/,
+        'MouseEvent': /^(?:click|mousewheel|dblclick|mouse(?:down|up|over|move|out))$/,
         'TextEvent': /^(?:textInput)$/,
-        'KeyboardEvent': /^(?:keydown|keyup|keypress)$/
+        'KeyboardEvent': /^(?:keydown|keyup|keypress)$/,
+        'FocusEvent': /^(?:focusin|focusout)$/
+    };
+
+    var eventSimulators = {
+        HTMLEvent: function (ev){
+            var bEvent = new Event('HTMLEvent');
+            bEvent.initEvent(ev.type, ev.bubbles, ev.cancelable);
+            return bEvent
+        },
+        MouseEvent: function (ev) {
+            return new MouseEvent(ev.type, ev);
+        },
+        TextEvent: function (ev) {
+            try {
+                var bEvent = document.createEvent('TextEvent');
+                bEvent.initTextEvent('textInput', true, true, null, ev.data);
+                var target = ev.target;
+                //dunno why but it does not work without selectionStart and selectionEnd assignment, maybe focus is needed? will investigate on this
+                target.selectionStart = 0;
+                target.selectionEnd = 0;
+                return bEvent;
+            }
+            catch (e) {
+                console.error("Your browser does not support text events!");
+                throw e;
+            }
+        },
+        KeyboardEvent: function (ev) {
+            var bEvent = document.createEvent("KeyboardEvent");
+            bEvent.initKeyboardEvent (ev.type, true, true, window,
+                    ev.ctrlKey, ev.altKey, ev.shiftKey, ev.metaKey,
+                    ev.keyCode, ev.charCode);
+            return bEvent;
+        },
+        FocusEvent: function (ev) {
+            var aFE;
+            try{
+                aFE = new FocusEvent(ev);
+            }catch(e){
+                console.error("Your browser does not support FocusEvent constructor!");
+                throw e;
+            }
+            return aFE;
+        }
     };
 
     function InputEvent(event, fromJSON) {
@@ -114,7 +159,7 @@
         this.event = event;
 
         this.simulate = function simulate(element) {
-            var bEvent, eventType = null;
+            var evForDispatch, eventType = null;
 
             for (var name in eventMatchers) {
                 if (eventMatchers[name].test(event.type)) {
@@ -123,43 +168,12 @@
                 }
             }
 
-            if (!eventType){
-                throw new SyntaxError('Only HTMLEvents and MouseEvents interfaces are supported');
+            if (eventSimulators.hasOwnProperty(eventType)){
+                evForDispatch = eventSimulators[eventType](event);
+                event.target.dispatchEvent(evForDispatch);
+            } else {
+                throw new SyntaxError('Unsupported event type');
             }
-
-            if (eventType == 'HTMLEvents') {
-                bEvent = new Event(eventType);
-                bEvent.initEvent(event.type, options.bubbles, options.cancelable);
-                element.dispatchEvent(bEvent);
-
-            }
-            else if(eventType === 'MouseEvents') {
-                bEvent = new MouseEvent(event.type, self.event);
-                self.event.target.dispatchEvent(bEvent);
-            } else if(eventType === 'TextEvent') {
-
-                try {
-                    bEvent = document.createEvent('TextEvent');
-                    bEvent.initTextEvent ('textInput', true, true, null, self.event.data);
-                    var target = self.event.target;
-                    //dunno why but it does not work without selectionStart and selectionEnd assignment, maybe focus is needed? will investigate on this
-                    target.selectionStart = 0;
-                    target.selectionEnd = 0;
-                    target.dispatchEvent(bEvent);
-                }
-                catch (e) {
-                    console.error("Your browser does not support text events!");
-                    throw e;
-                }
-
-            } else if(eventType === 'KeyboardEvent') {
-                bEvent = document.createEvent("KeyboardEvent");
-                bEvent.initKeyboardEvent (event.type, true, true, window,
-                        event.ctrlKey, event.altKey, event.shiftKey, event.metaKey,
-                        self.event.keyCode, self.event.charCode);
-
-            }
-            self.event.target.dispatchEvent(bEvent);
 
             return element;
         }
@@ -196,6 +210,7 @@
 
     subscribeEvents(document, mouseEvents);
     subscribeEvents(document, keyEvents);
+    subscribeEvents(document, ['focusin', 'focusout']);
 
     $('#saveButton').on('click', function () {
         localStorage.setItem('events', JSON.stringify(eventsMemory));
@@ -208,7 +223,7 @@
             setTimeout(function () {
                 var anIE = new InputEvent(JSON.parse(evJSON.event), true);
                 anIE.simulate();
-                console.log("event dispatched at " + evJSON.start_offset);
+                console.log(anIE.event.type + " dispatched at " + evJSON.start_offset);
             }, evJSON.start_offset);
         });
     });
